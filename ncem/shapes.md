@@ -12,52 +12,63 @@ else:
     yield (h_1, sf, h_0, h_0_full, a, a_full, node_covar, g), h_1
 ```
 
-### Shapes Known
+### Shapes
 ```python
-g = np.zeros((self.n_domains,), dtype="int32")
+def _get_output_signature(self, resampled: bool = False):
+        """Get output signatures.
 
-a_shape = np.asarray((self.n_eval_nodes_per_graph, self.max_nodes), dtype="int64")
-a = tf.SparseTensor(indices=a_ind, values=a_val, dense_shape=a_shape)
+        Parameters
+        ----------
+        resampled : bool
+            Whether dataset is resampled or not.
 
-afull_shape = np.asarray((self.max_nodes, self.max_nodes), dtype="int64")
-a_full = tf.SparseTensor(indices=afull_ind, values=afull_val, dense_shape=afull_shape)
+        Returns
+        -------
+        output_signature
+        """
+        h_1 = tf.TensorSpec(
+            shape=(self.n_eval_nodes_per_graph, self.n_features_1), dtype=tf.float32
+        )  # input node features
+        sf = tf.TensorSpec(shape=(self.n_eval_nodes_per_graph, 1), dtype=tf.float32)  # input node size factors
+        h_0 = tf.TensorSpec(
+            shape=(self.n_eval_nodes_per_graph, self.n_features_0), dtype=tf.float32
+        )  # input node features conditional
+        h_0_full = tf.TensorSpec(
+            shape=(self.max_nodes, self.n_features_0), dtype=tf.float32
+        )  # input node features conditional
+        a = tf.SparseTensorSpec(shape=None, dtype=tf.float32)  # adjacency matrix
+        a_full = tf.SparseTensorSpec(shape=None, dtype=tf.float32)  # adjacency matrix
+        node_covar = tf.TensorSpec(
+            shape=(self.n_eval_nodes_per_graph, self.n_node_covariates), dtype=tf.float32
+        )  # node-level covariates
+        domain = tf.TensorSpec(shape=(self.n_domains,), dtype=tf.int32)  # domain
+        reconstruction = tf.TensorSpec(
+            shape=(self.n_eval_nodes_per_graph, self.n_features_1), dtype=tf.float32
+        )  # node features to reconstruct
+        kl_dummy = tf.TensorSpec(shape=(self.n_eval_nodes_per_graph,), dtype=tf.float32)  # dummy for kl loss
 
-node_covar = self.node_covar[key][idx_nodes]
-diff = self.max_nodes - node_covar.shape[0]
-zeros = np.zeros((diff, node_covar.shape[1]))
-node_covar = np.asarray(np.concatenate([node_covar, zeros], axis=0), dtype="float32")
-node_covar = node_covar[indices, :]
-
-kl_dummy = np.zeros((self.n_eval_nodes_per_graph,), dtype="float32")
+        if self.vi_model:
+            if resampled:
+                output_signature = (
+                    (h_1, sf, h_0, h_0_full, a, a_full, node_covar, domain),
+                    (reconstruction, kl_dummy),
+                    (h_1, sf, h_0, h_0_full, a, a_full, node_covar, domain),
+                    (reconstruction, kl_dummy),
+                )
+            else:
+                output_signature = ((h_1, sf, h_0, h_0_full, a, a_full, node_covar, domain), (reconstruction, kl_dummy))
+        else:
+            if resampled:
+                output_signature = (
+                    (h_1, sf, h_0, h_0_full, a, a_full, node_covar, domain),
+                    reconstruction,
+                    (h_1, sf, h_0, h_0_full, a, a_full, node_covar, domain),
+                    reconstruction,
+                )
+            else:
+                output_signature = ((h_1, sf, h_0, h_0_full, a, a_full, node_covar, domain), reconstruction)
+        return output_signature
 ```
-
-### Uncertain Shapes
-
-```python
-
-### h_1
-h_1 = self.h_1[key][idx_nodes]
-diff = self.max_nodes - h_1.shape[0]
-zeros = np.zeros((diff, h_1.shape[1]), dtype="float32")
-h_1 = np.asarray(np.concatenate((h_1, zeros), axis=0), dtype="float32")
-h_1 = h_1[indices]
-
-
-### sf
-sf = np.expand_dims(self.size_factors[key][idx_nodes], axis=1)
-diff = self.max_nodes - sf.shape[0]
-zeros = np.zeros((diff, sf.shape[1]))
-sf = np.asarray(np.concatenate([sf, zeros], axis=0), dtype="float32")
-sf = sf[indices, :]
-
-### h_0 and h_0_full
-h_0 = self.h_0[key][idx_nodes]
-diff = self.max_nodes - h_0.shape[0]
-zeros = np.zeros((diff, h_0.shape[1]), dtype="float32")
-h_0_full = np.asarray(np.concatenate((h_0, zeros), axis=0), dtype="float32")
-h_0 = h_0_full[indices]
-```
-
 
 ## Base Estimator Neighbors
 ### Shapes Known
@@ -73,46 +84,61 @@ else:
 where
 
 ```python
-g = np.zeros((self.n_domains,), dtype="int32")
-a_neighborhood = np.zeros((self.n_eval_nodes_per_graph, self.n_neighbors_padded), "float32")
-kl_dummy = np.zeros((self.n_eval_nodes_per_graph,), dtype="float32")
-```
-### Uncertain shapes
+def _get_output_signature(self, resampled: bool = False):
+        """Get output signatures.
 
-``` python
+        Parameters
+        ----------
+        resampled : bool
+            Whether dataset is resampled or not.
 
-### sf
-sf = np.expand_dims(self.size_factors[key][idx_nodes][indices], axis=1)
-## above is equivalent to 
-sf = self.size_factors[key][idx_nodes][indices][:,np.newaxis]
+        Returns
+        -------
+        output_signature
+        """
+        # target node features
+        h_targets = tf.TensorSpec(
+            shape=(self.n_eval_nodes_per_graph, self.n_features_in), dtype=tf.float32
+        )
+        # neighbor node features
+        h_neighbors = tf.TensorSpec(
+            shape=(self.n_eval_nodes_per_graph, self.n_neighbors_padded, self.n_features_in), dtype=tf.float32
+        )
+        sf = tf.TensorSpec(shape=(self.n_eval_nodes_per_graph, 1), dtype=tf.float32)  # input node size factors
+        # node-level covariates
+        node_covar = tf.TensorSpec(shape=(self.n_eval_nodes_per_graph, self.n_node_covariates), dtype=tf.float32)
+        # adjacency matrix
+        a = tf.TensorSpec(shape=(self.n_eval_nodes_per_graph, self.n_neighbors_padded), dtype=tf.float32)
+        # domain
+        domain = tf.TensorSpec(shape=(self.n_domains,), dtype=tf.int32)
+        # node features to reconstruct
+        reconstruction = tf.TensorSpec(shape=(self.n_eval_nodes_per_graph, self.n_features_1), dtype=tf.float32)
+        # dummy for kl loss
+        kl_dummy = tf.TensorSpec(shape=(self.n_eval_nodes_per_graph,), dtype=tf.float32)
 
-### h_out
-h_out = self.h_1[key][idx_nodes[indices], :]
-
-### node_covar
-node_covar = self.node_covar[key][idx_nodes][indices, :]
-
-### h_neighbors
-h_neighbors = []
-for i, j in enumerate(idx_nodes[indices]):
-    idx_neighbors = np.where(a_j > 0.)[0]
-    if self.h0_in:
-        h_neighbors_j = self.h_0[key][idx_neighbors, :]
-    else:
-        h_neighbors_j = self.h_1[key][idx_neighbors, :][:, self.idx_neighbor_features]
-    h_neighbors_j = np.expand_dims(h_neighbors_j, axis=0)
-    # Pad neighborhoods:
-    diff = self.n_neighbors_padded - h_neighbors_j.shape[1]
-    zeros = np.zeros((1, diff, h_neighbors_j.shape[2]), dtype="float32")
-    h_neighbors_j = np.concatenate([h_neighbors_j, zeros], axis=1)
-    h_neighbors.append(h_neighbors_j)
-h_neighbors = np.concatenate(h_neighbors, axis=0)
-
-
-### h_targets
-if self.h0_in:
-    h_targets = self.h_0[key][idx_nodes[indices], :]
-else:
-    h_targets = self.h_1[key][idx_nodes[indices], :][:, self.idx_target_features]
+        if self.vi_model:
+            if resampled:
+                output_signature = (
+                    (h_targets, h_neighbors, sf, a, node_covar, domain),
+                    (reconstruction, kl_dummy),
+                    (h_targets, h_neighbors, sf, a, node_covar, domain),
+                    (reconstruction, kl_dummy),
+                )
+            else:
+                output_signature = ((h_targets, h_neighbors, sf, a, node_covar, domain),
+                                    (reconstruction, kl_dummy))
+        else:
+            if resampled:
+                output_signature = (
+                    (h_targets, h_neighbors, sf, a, node_covar, domain),
+                    reconstruction,
+                    (h_targets, h_neighbors, sf, a, node_covar, domain),
+                    reconstruction,
+                )
+            else:
+                output_signature = ((h_targets, h_neighbors, sf, a, node_covar, domain),
+                                    reconstruction)
+        # print(output_signature)
+        return output_signature
 ```
 
