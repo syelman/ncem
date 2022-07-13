@@ -142,3 +142,4 @@ dmypy.json
 # Coala
 *.orig
 ncem/Untitled.ipynb
+ncem/**jvsc**.ipynb
