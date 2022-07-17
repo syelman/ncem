@@ -144,3 +144,4 @@ dmypy.json
 ncem/Untitled.ipynb
 ncem/**jvsc**.ipynb
 ncem/data/processed/*.pt
+ncem/runs/VGAE_experiment_2d_100_epochs/*
