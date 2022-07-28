@@ -139,6 +139,9 @@ dmypy.json
 # Jetbrains IDE
 .idea/
 
+# VSCODE
+.vscode/*
+
 # Coala
 *.orig
 
