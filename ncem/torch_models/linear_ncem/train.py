@@ -1,8 +1,7 @@
-
 import os
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from model import NonLinearNCEM
+from model import LinearNCEM
 from torch_geometric import loader
 from torch_geometric.data import Data
 import numpy as np
@@ -11,7 +10,7 @@ from ncem.torch_data.datasets.hartmann import Hartmann
 
 
 def main():
-    args, arg_groups = parse_args(NonLinearNCEM)
+    args, arg_groups = parse_args(LinearNCEM)
 
     # Checkpoint settings
     checkpoint_callback = ModelCheckpoint(
@@ -34,6 +33,7 @@ def main():
             return Data(
                 x=data.cell_type,
                 y=data.gene_expression,
+                sf=data.scale_factor,
                 edge_index=data.edge_index,
                 transform_done=True,
                 num_nodes=data.cell_type.shape[0],
@@ -41,7 +41,7 @@ def main():
 
         dataset = Hartmann(args.data_path, transform=transform_hartmann_ncem)
         # TODO: Do test
-        # TODO: Distribute better
+        # TODO: Distribute better (add 2nd option: eg train on 10 nodes per graph for each batch)
         idxs = np.arange(len(dataset))
         np.random.shuffle(idxs)
         split = int(0.8 * len(dataset))
@@ -64,10 +64,10 @@ def main():
     else:
         raise NotImplementedError()
 
-    model = NonLinearNCEM(
+    model = LinearNCEM(
         in_channels=n_input_features,
         out_channels=n_output_features,
-        **vars(arg_groups["NonLinearNCEM"]))
+        **vars(arg_groups["LinearNCEM"]))
     
     trainer: pl.Trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint_callback])
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)

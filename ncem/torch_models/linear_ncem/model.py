@@ -1,8 +1,9 @@
 """
-NonLinearNCEM module
+LinearNCEM module
 """
 import sys
 import os
+
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
@@ -12,58 +13,71 @@ import torch_geometric.nn as geom_nn
 import pytorch_lightning as pl
 import torch.optim as optim
 from sklearn.metrics import r2_score
-from ncem.torch_models.modules.gnn_model import GNNModel
-from ncem.torch_models.modules.mlp_model import MLPModel
 from ncem.utils.init_weights import init_weights
+from ncem.torch_models.modules.linear_model import LinearNonspatial, LinearSpatial
+import numpy as np
 
 
-class NonLinearNCEM(pl.LightningModule):
-    def __init__(self, **model_kwargs):
+
+class LinearNCEM(pl.LightningModule):
+    def __init__(self, type, use_node_scale=True, **model_kwargs):
         super().__init__()
         # Saving hyperparameters
         self.save_hyperparameters(model_kwargs)
 
-        self.encoder = GNNModel(
-            in_channels=self.hparams.in_channels,
-            hidden_dims=self.hparams.encoder_hidden_dims,
-            out_channels=self.hparams.latent_dim,
-        )
+        self.use_node_scale=use_node_scale 
 
-        self.decoder_sigma = MLPModel(
-            in_channels=self.hparams.latent_dim,
-            out_channels=self.hparams.out_channels,
-            hidden_dims=self.hparams.decoder_hidden_dims,
-        )
-        self.decoder_mu = MLPModel(
-            in_channels=self.hparams.latent_dim,
-            out_channels=self.hparams.out_channels,
-            hidden_dims=self.hparams.decoder_hidden_dims,
-        )
+        if type.casefold() =="spatial":
+
+            self.model_sigma = LinearSpatial(
+                in_channels=self.hparams.in_channels,
+                out_channels=self.hparams.out_channels
+            )
+            self.model_mu = LinearSpatial(
+                in_channels=self.hparams.in_channels,
+                out_channels=self.hparams.out_channels
+            )
+
+        elif type.casefold() =="nonspatial":
+
+            self.model_sigma = LinearNonspatial(
+                in_channels=self.hparams.in_channels,
+                out_channels=self.hparams.out_channels
+            )
+            self.model_mu = LinearNonspatial(
+                in_channels=self.hparams.in_channels,
+                out_channels=self.hparams.out_channels
+            )
+        else:
+            raise ValueError("An invalid model type has been used as input. Valid types: 'spatial' or 'nonspatial'")
 
         self.loss_module = nn.GaussianNLLLoss(eps=1e-5)
 
-        self.encoder.apply(init_weights)
-        self.decoder_mu.apply(init_weights)
-        self.decoder_sigma.apply(init_weights)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
-        parser = parent_parser.add_argument_group("NonLinearNCEM")
+        parser = parent_parser.add_argument_group("LinearNCEM")
         parser.add_argument("--lr", type=float, default=0.1, help="the initial learning rate")
+        parser.add_argument("--type", type=str, default="spatial", help="type of linear model to use (spatial or nonspatial)")
+        parser.add_argument("--use_node_scale", type=bool, default=True, help="whether to use scale factor to scale nodes")
         parser.add_argument("--weight_decay", type=float, default=2e-3, help="the weight decay")
-        parser.add_argument("--latent_dim", type=int, default=30, help="the encoder latent dimension")
-        parser.add_argument("--decoder_hidden_dims", nargs='+', type=int,
-                            default=None, help="Decoder Hidden Layer Dim")  #
-        parser.add_argument("--encoder_hidden_dims", nargs='+', type=int,
-                            default=None, help="Encoder Hidden Layer Dim")  #
-        parser.add_argument("--dp_rate", type=float, default=0.1, help="Dropout Rate")
         return parent_parser
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
-        x = self.encoder(x, edge_index)
-        sigma = self.decoder_sigma(x)
-        mu = self.decoder_mu(x)
+        mu = self.model_mu(x, edge_index)
+        sigma = torch.exp(self.model_sigma(x, edge_index))
+
+        #scale by sf
+        if self.use_node_scale:
+            sf=torch.unsqueeze(data.sf,1) #Nx1
+            mu=sf*mu
+            sigma=sf*sigma
+
+        #clip output
+        bound = 60.0
+        torch.clamp(mu, min=-np.exp(bound), max=np.exp(bound))
+        torch.clamp(sigma, min=-bound, max=bound)
         return mu, sigma
 
     def configure_optimizers(self):
