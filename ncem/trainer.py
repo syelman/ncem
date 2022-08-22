@@ -33,6 +33,8 @@ def create_pre_transform(model_name, dataset, conf):
 def create_model(model_name, dataset, conf, args_group):
     if model_name == "GraphEmbedding":
         return _create_model(model_name, args_group, num_features=34)
+    elif model_name == "NonLinearNCEM":
+        return _create_model(model_name, arg_groups, in_channels=34, out_channels=11)
 
 
 if __name__ == "__main__":
