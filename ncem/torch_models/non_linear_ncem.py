@@ -15,6 +15,7 @@ from sklearn.metrics import r2_score
 from ncem.torch_models.modules.gnn_model import GNNModel
 from ncem.torch_models.modules.mlp_model import MLPModel
 from ncem.utils.init_weights import init_weights
+from torch_geometric.data import Batch
 
 
 class NonLinearNCEM(pl.LightningModule):
@@ -75,16 +76,16 @@ class NonLinearNCEM(pl.LightningModule):
         return optimizer
 
     def training_step(self, batch, _):
-        if type(batch)==list:
-            batch=batch[0]
+        if type(batch) == list:
+            batch = Batch.from_data_list(batch)
         mu, sigma = self.forward(batch)
         loss = self.loss_module(mu, batch.y, sigma)
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, _):
-        if type(batch)==list:
-            batch=batch[0]
+        if type(batch) == list:
+            batch = Batch.from_data_list(batch)
         mu, sigma = self.forward(batch)
         val_loss = self.loss_module(mu, batch.y, sigma)
         val_r2_score = r2_score(batch.y.cpu(), mu.cpu())
@@ -92,8 +93,8 @@ class NonLinearNCEM(pl.LightningModule):
         self.log('val_loss', val_loss, prog_bar=True)
 
     def test_step(self, batch, _):
-        if type(batch)==list:
-            batch=batch[0]
+        if type(batch) == list:
+            batch = Batch.from_data_list(batch)
         mu, sigma = self.forward(batch)
         test_loss = self.loss_module(mu, batch.y, sigma)
         test_r2_score = r2_score(batch.y.cpu(), mu.cpu())

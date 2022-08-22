@@ -2,7 +2,7 @@
 import os
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
-from model import NonLinearNCEM
+from ncem.torch_models.non_linear_ncem import NonLinearNCEM
 from torch_geometric import loader
 from torch_geometric.data import Data
 import numpy as np
